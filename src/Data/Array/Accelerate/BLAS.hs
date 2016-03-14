@@ -39,7 +39,7 @@ import Debug.Trace
 theHandle :: BL.Handle
 theHandle = unsafePerformIO $ do
     h <- BL.create
-    () <- BL.setPointerMode h BL.Device
+    () <- BL.setPointerMode h BL.Host
     return h
 
 --foreign import ccall "cublas.h cublasInit"

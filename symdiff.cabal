@@ -59,8 +59,10 @@ library
   
   -- Other library packages from which modules are imported.
   build-depends:       base >=4.7 && <4.9,
-                       accelerate >=0.15.1.0,
-                       accelerate-cuda <=0.15.1.1,
+                       accelerate >=2.0,
+--0.15.1.0,
+                       accelerate-cuda >=2.0,
+--0.15.1.1,
                        cuda >=0.7,
                        cublas >= 0.3
 
