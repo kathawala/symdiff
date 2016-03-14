@@ -49,6 +49,7 @@ cabal-version:       >=1.10
 library
   -- Modules exported by the library.
   exposed-modules: Data.Array.Accelerate.BLAS.Internal.Dot
+                   Data.Array.Accelerate.BLAS
   
   -- Modules included in this library but not exported.
   --other-modules: Data.Array.Accelerate.BLAS.Internal.Dot     
@@ -57,11 +58,13 @@ library
   -- other-extensions:    
   
   -- Other library packages from which modules are imported.
-  build-depends:       base >=4.8 && <4.9,
+  build-depends:       base >=4.7 && <4.9,
                        accelerate >=0.15.1.0,
                        accelerate-cuda <=0.15.1.1,
                        cuda >=0.7,
-                       cublas >=0.3
+                       cublas >= 0.3
+
+  extra-libraries:     cublas
   
   -- Directories containing source files.
   hs-source-dirs:      src

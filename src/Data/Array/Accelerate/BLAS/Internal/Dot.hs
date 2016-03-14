@@ -7,7 +7,10 @@ import Data.Array.Accelerate.CUDA.Foreign
 import Prelude hiding (zipWith)
 --import System.Mem.Weak (addFinalizer)
 -- import System.IO.Unsafe (unsafePerformIO)
-import Foreign.CUDA as C
+import qualified Foreign.CUDA as C
+import qualified Foreign.CUDA.Cublas as BL
+import qualified Foreign.CUDA.Cublas.FFI as BLF
+import Foreign.C.Types
 import Debug.Trace
 
 -- D.initialise []
@@ -22,34 +25,32 @@ import Debug.Trace
 --  --addFinalizer handle (destroy h >> putStrLn "GPU Device work complete")
 --  return h
 
-cudaDotProductF :: Handle -> (Vector Float, Vector Float) -> CIO (Scalar Float)
-cudaDotProductF handle (v1,v2) = do
+cudaDotProductF :: (Vector CFloat, Vector CFloat) -> CIO (Scalar CFloat)
+cudaDotProductF (v1,v2) = do
   traceShowM $ "cudaDotProductF"
   let n = arraySize (arrayShape v1)
   traceShowM $ n
-  o <- allocateArray Z
+  --o <- allocateArray Z
   -- need "handle" and pointer to v1 and "stride between consecutive elements of v1" and
   -- pointer to v2 and "stride between consecutive elements of v2" and result output array
 
   ((),v1ptr) <- devicePtrsOfArray v1
   ((),v2ptr) <- devicePtrsOfArray v2
-  ((),optr)  <- devicePtrsOfArray o
+  --((),optr)  <- devicePtrsOfArray o
   
-  traceShowM $ handle
-  traceShowM $ "got handle, calling cublasSdot"
-  liftIO $ cublasSdot handle n v1ptr 1 v2ptr 1 optr
+  o <- liftIO $ BL.dot theHandle n v1ptr 1 v2ptr 1
 
-  return o
+  return $ fromList Z [o]
 
-sdot :: Acc (Vector Float) -> Acc (Vector Float) -> Acc (Scalar Float)
+sdot :: Acc (Vector CFloat) -> Acc (Vector CFloat) -> Acc (Scalar CFloat)
 sdot v1 v2 = foreignAcc cudaDot pureDot $ lift (v1,v2)
-  where cudaDot = CUDAForeignAcc "cudaDotProductF" (\stream -> cudaDotProductF theHandle)
-        pureDot :: Acc (Vector Float, Vector Float) -> Acc (Scalar Float)
+  where cudaDot = CUDAForeignAcc "cudaDotProductF" (\stream -> cudaDotProductF)
+        pureDot :: Acc (Vector CFloat, Vector CFloat) -> Acc (Scalar CFloat)
         pureDot vs = let (u,v) = unlift vs
                      in fold (+) 0 $ zipWith (*) u v
 
 test = do
-  let x = fromList (Z:.10) [1..10] :: Vector Float
-  let y = fromList (Z:.10) [2..11] :: Vector Float
+  let x = fromList (Z:.10) [1..10] :: Vector CFloat
+  let y = fromList (Z:.10) [2..11] :: Vector CFloat
 
   run $ sdot (use x) (use y)
