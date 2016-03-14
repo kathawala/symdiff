@@ -1,0 +1,9 @@
+ghc-options: -optc -I/usr/local/cuda/include  
+cc-options:  -I/usr/local/cuda/include  
+ld-options:  -L/usr/local/cuda/lib64  -lcusparse -lcublas  
+x-extra-c2hs-options: --cpp=/usr/local/cuda/bin/nvcc --cppopts=-E 
+
+include-dirs: /usr/local/cuda/include
+extra-lib-dirs:  /usr/local/cuda/lib64
+
+cpp-options: -DCUDA_INCLUDE_DIR="/usr/local/cuda/include"
