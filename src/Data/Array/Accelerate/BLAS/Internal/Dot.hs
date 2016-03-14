@@ -26,8 +26,14 @@ import Debug.Trace
 --  --addFinalizer handle (destroy h >> putStrLn "GPU Device work complete")
 --  return h
 
-cudaDotProductF :: (Vector Float, Vector Float) -> CIO (Scalar Float)
-cudaDotProductF (v1,v2) = do
+--foreign import ccall "cublas_v2.h cublasSdot_v2"
+--   cublasSdot :: BL.Handle 
+--      -> Int -> DevicePtr Float
+--      -> Int -> DevicePtr Float
+--      -> Int -> DevicePtr Float -> IO ()
+
+cudaDotProductF :: Maybe Stream -> (Vector Float, Vector Float) -> CIO (Scalar Float)
+cudaDotProductF ms (v1,v2) = do
   traceShowM "cudaDotProductF"
   let n = arraySize (arrayShape v1)
   traceShowM n
@@ -35,22 +41,45 @@ cudaDotProductF (v1,v2) = do
   -- need "handle" and pointer to v1 and "stride between consecutive elements of v1" and
   -- pointer to v2 and "stride between consecutive elements of v2" and result output array
 
-  ((),v1ptr) <- devicePtrsOfArray v1
-  ((),v2ptr) <- devicePtrsOfArray v2
-  --((),optr)  <- devicePtrsOfArray o
+  withDevicePtrs v1 ms $ \v1ptr -> do
+    withDevicePtrs v2 ms $ \v2ptr -> do
+      --o <- allocateArray Z
+      --withDevicePtrs o ms $ \optr -> do
+      case ms of
+        Just s -> do
+          liftIO $ BLF.setStream theHandle s
+          CFloat o <- liftIO $ BL.dot theHandle n (castDevPtr v1ptr) 1 (castDevPtr v2ptr) 1
+          return $ fromList Z [o]      
+        Nothing -> do
+          CFloat o <- liftIO $ BL.dot theHandle n (castDevPtr v1ptr) 1 (castDevPtr v2ptr) 1
+          return $ fromList Z [o]
+        --traceShowM "doing cublasSdot"
+        --traceShowM "did cublasSdot"
+        --return o
+      --traceShowM "running BL.dot"
+      --CFloat o <- liftIO $ BL.dot theHandle n (castDevPtr v1ptr) 1 (castDevPtr v2ptr) 1
+      --traceShowM "ran BL.dot"
+      --traceShowM o
+      --return o
+      --traceShowM $ fromList Z [o]
+      --return $ fromList Z [o]
+
+  --((),v1ptr) <- devicePtrsOfArray v1
+  --((),v2ptr) <- devicePtrsOfArray v2
+  ----((),optr)  <- devicePtrsOfArray o
   
-  traceShowM "running BL.dot"
+  --traceShowM "running BL.dot"
 
-  CFloat o <- liftIO $ BL.dot theHandle n (castDevPtr v1ptr) 1 (castDevPtr v2ptr) 1
+  --CFloat o <- liftIO $ BL.dot theHandle n (castDevPtr v1ptr) 1 (castDevPtr v2ptr) 1
 
-  traceShowM "ran BL.dot"
-  traceShowM o
-  traceShowM $ fromList Z [o]
-  return $ fromList Z [o]
+  --traceShowM "ran BL.dot"
+  --traceShowM o
+  --traceShowM $ fromList Z [o]
+  --return $ fromList Z [o]
 
 sdot :: Acc (Vector Float) -> Acc (Vector Float) -> Acc (Scalar Float)
 sdot v1 v2 = foreignAcc cudaDot pureDot $ lift (v1,v2)
-  where cudaDot = CUDAForeignAcc "cudaDotProductF" (\stream -> cudaDotProductF)
+  where cudaDot = CUDAForeignAcc "cudaDotProductF" (\stream -> cudaDotProductF (Just stream))
         pureDot :: Acc (Vector Float, Vector Float) -> Acc (Scalar Float)
         pureDot vs = let (u,v) = unlift vs
                      in fold (+) 0 $ zipWith (*) u v
