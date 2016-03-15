@@ -49,6 +49,7 @@ cabal-version:       >=1.10
 library
   -- Modules exported by the library.
   exposed-modules: Data.Array.Accelerate.BLAS.Internal.Dot
+                   -- Data.Array.Accelerate.BLAS.Internal.Gemm
                    Data.Array.Accelerate.BLAS
   
   -- Modules included in this library but not exported.

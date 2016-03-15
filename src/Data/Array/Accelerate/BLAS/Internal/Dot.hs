@@ -47,12 +47,23 @@ cudaDotProductF ms (v1,v2) = do
       --withDevicePtrs o ms $ \optr -> do
       case ms of
         Just s -> do
+          traceShowM "Just"
           liftIO $ BLF.setStream theHandle s
           CFloat o <- liftIO $ BL.dot theHandle n (castDevPtr v1ptr) 1 (castDevPtr v2ptr) 1
-          return $ fromList Z [o]      
+          traceShowM o
+          let oarr = fromList Z [o]
+          traceShowM oarr
+          useArray oarr
+          traceShowM oarr
+          return oarr
         Nothing -> do
           CFloat o <- liftIO $ BL.dot theHandle n (castDevPtr v1ptr) 1 (castDevPtr v2ptr) 1
-          return $ fromList Z [o]
+          traceShowM o
+          let oarr = fromList Z [o]
+          traceShowM oarr
+          useArray oarr
+          traceShowM oarr
+          return oarr
         --traceShowM "doing cublasSdot"
         --traceShowM "did cublasSdot"
         --return o
