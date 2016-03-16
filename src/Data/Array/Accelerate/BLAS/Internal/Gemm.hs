@@ -1,25 +1,23 @@
-{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeOperators #-}
 module Data.Array.Accelerate.BLAS.Internal.Gemm where
 
 import Data.Array.Accelerate.BLAS
-import Data.Array.Accelerate.CUDA hiding (create)
-import Data.Array.Accelerate hiding (snd)
+import Data.Array.Accelerate.CUDA
+import Data.Array.Accelerate
 import Data.Array.Accelerate.CUDA.Foreign
 import Prelude hiding (zipWith,fold,all,replicate)
-import qualified Foreign.CUDA as C
 import Foreign.CUDA.Ptr
 import qualified Foreign.CUDA.Cublas as BL
 import qualified Foreign.CUDA.Cublas.FFI as BLF
 import Foreign.C.Types
-import Debug.Trace
+-- import Debug.Trace
 
 type Matrix a = Array DIM2 a
 
 matMul :: (IsNum e, Elt e) => Acc (Matrix e, Matrix e) -> Acc (Matrix e)
 matMul vs = fold (+) 0 $ zipWith (*) arrRepl brrRepl
   where
-    (arr,brr) = unlift vs
+    (arr,brr)           = unlift vs
     Z :. rowsA :. _     = unlift (shape arr)    :: Z :. Exp Int :. Exp Int
     Z :. _     :. colsB = unlift (shape brr)    :: Z :. Exp Int :. Exp Int
 
@@ -28,31 +26,27 @@ matMul vs = fold (+) 0 $ zipWith (*) arrRepl brrRepl
 
 cudaGemmF :: Maybe Stream -> (Matrix Float, Matrix Float) -> CIO (Matrix Float)
 cudaGemmF ms (a,b) = do
-  traceShowM "cudaGemmF"
+  -- traceShowM "cudaGemmF"
   let Z :. ra :. ca = arrayShape a   -- m k
-      Z :. rb :. cb  = arrayShape b  -- k n
-  traceShowM (ra,ca,rb,cb)
+      Z :. rb :. cb = arrayShape b   -- k n
+  -- traceShowM (ra,ca,rb,cb)
   c <- allocateArray $ Z :. ra :. cb -- m n
   withDevicePtrs a ms $ \aptr -> do
     withDevicePtrs b ms $ \bptr -> do
       withDevicePtrs c ms $ \cptr -> do
-        -- BL.gemm :: Handle -> transa -> transb -> m -> n -> k -> alpha -> b -> ldb -> a -> lda -> beta -> c -> ldc
-        -- because Accelerate uses row-major matrices, we need these arguments to BL.gemm
-        -- transa = BL.T
-        -- transb = BL.T
-        -- m = ca
-        -- n = cb
-        -- k = rb = ca
-        -- apha = Cfloat 1
-        -- b = ptr b
-        -- ldb = cb
-        -- a = ptr a
-        -- lda = ca
-        -- beta = CFloat 0
-        -- c = ptr c
-        -- ldc = ca
+        -- BL.gemm :: Handle -> transa -> transb -> m -> n -> k -> alpha -> a -> lda -> b -> ldb -> beta -> c -> ldc
+        -- Since CUBLAS uses column-major mode on matrices, we will need to change this up a bit to:
+        -- BL.gemm :: Handle -> transa -> transb -> n -> m -> k -> alpha -> b -> ldb -> a -> lda -> beta -> c -> ldc
+        -- where
+        -- transa = BL.N
+        -- transb = BL.N
+        -- m      = numRowsofA
+        -- n      = numColsofB
+        -- k      = numColsofA = numRowsofB
+        -- lda    = numColsofA
+        -- ldb    = numColsofB
+        -- ldc    = numColsofB
         liftIO $ BL.gemm theHandle BL.N BL.N cb ra rb (CFloat 1) (castDevPtr bptr) cb (castDevPtr aptr) ca (CFloat 0) (castDevPtr cptr) cb
-        -- liftIO $ BL.gemm theHandle BL.N BL.N ra cb ca (CFloat 1) (castDevPtr aptr) ra (castDevPtr bptr) rb (CFloat 0) (castDevPtr cptr) ra
         return c
 
 gemm :: Acc (Matrix Float) -> Acc (Matrix Float) -> Acc (Matrix Float)
