@@ -36,7 +36,23 @@ cudaGemmF ms (a,b) = do
   withDevicePtrs a ms $ \aptr -> do
     withDevicePtrs b ms $ \bptr -> do
       withDevicePtrs c ms $ \cptr -> do
-        liftIO $ BL.gemm theHandle BL.N BL.N ra cb ca (CFloat 1) (castDevPtr aptr) ra (castDevPtr bptr) rb (CFloat 0) (castDevPtr cptr) ra
+        -- BL.gemm :: Handle -> transa -> transb -> m -> n -> k -> alpha -> b -> ldb -> a -> lda -> beta -> c -> ldc
+        -- because Accelerate uses row-major matrices, we need these arguments to BL.gemm
+        -- transa = BL.T
+        -- transb = BL.T
+        -- m = ca
+        -- n = cb
+        -- k = rb = ca
+        -- apha = Cfloat 1
+        -- b = ptr b
+        -- ldb = cb
+        -- a = ptr a
+        -- lda = ca
+        -- beta = CFloat 0
+        -- c = ptr c
+        -- ldc = ca
+        liftIO $ BL.gemm theHandle BL.T BL.T ca cb rb (CFloat 1) (castDevPtr bptr) cb (castDevPtr aptr) ca (CFloat 0) (castDevPtr cptr) ca
+        -- liftIO $ BL.gemm theHandle BL.N BL.N ra cb ca (CFloat 1) (castDevPtr aptr) ra (castDevPtr bptr) rb (CFloat 0) (castDevPtr cptr) ra
         return c
 
 gemm :: Acc (Matrix Float) -> Acc (Matrix Float) -> Acc (Matrix Float)
