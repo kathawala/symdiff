@@ -17,7 +17,7 @@ prop_dot_440 :: Bool
 prop_dot_440 = head (toList $ I.run $ sdot (use (fromList (Z:.10) [1..])) (use (fromList (Z:.10) [2..11]))) == 440.0
 
 prop_gemm :: Bool
-prop_gemm = (toList $ I.run $ gemm (use (fromList (Z:.3:.3) [0,5,1,2,6,-1,-4,3,7] :: Array DIM2 Float)) (use (fromList (Z:.3:.2) [8,-2,4,5,2,-3] :: Array DIM2 Float))) == [22.0,22.0,38.0,29.0,-6.0,2.0]
+prop_gemm = (toList $ I.run $ gemm (use (fromList (Z:.3:.3) [0,5,1,2,6,-1,-4,3,7] :: Array DIM2 Float)) (use (fromList (Z:.3) [8,-2,4] :: Vector Float))) == [-6.0,0.0,-10.0]
 
 prop_axpy_integrity :: [Float] -> [Float] -> Bool
 prop_axpy_integrity _ []  = True

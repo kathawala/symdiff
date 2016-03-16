@@ -18,19 +18,17 @@ toVector :: [Float] -> Acc (Vector Float)
 toVector x                   = use (fromList (Z :. (length x)) x)
 
 clevel :: Acc (Vector Float) -> Acc (Matrix Float) -> Acc (Vector Float) -> Acc (Vector Float)
-clevel x0 w b  = axpy wTimesX b
+clevel x w b  = axpy (gemm w x) b
   where 
-    x          = replicate (lift (Z :. All :. (1::Int))) (x0)
-    wTimesX    = slice (gemm w x) (lift (Z :. All :. (0::Int)))
-        
+    -- x          = replicate (lift (Z :. All :. (1::Int))) (x0)
+    -- wTimesX    = slice (gemm w x) (lift (Z :. All :. (0::Int)))
 
 hlevel :: Acc (Vector Float) -> Acc (Vector Float)
 hlevel = map tanh
 
 -- train is used as follows
--- train numTrainingCycles featureVec weightMatrix penaltyVec
+-- train numLayers featureVec weightMatrix penaltyVec
 -- vectors and matrices must be initialized using toMatrix and toVector
-train :: Int -> Acc (Vector Float) -> Acc (Matrix Float) -> Acc (Vector Float) -> Acc (Vector Float)
-train n x w b
-  | n == 0     = x 
-  | otherwise  = train (n-1) (hlevel $ clevel x w b) w b
+mlp :: Int -> Acc (Vector Float) -> Acc (Matrix Float) -> Acc (Vector Float) -> Acc (Matrix Float) -> Acc (Vector Float) -> Acc (Vector Float)
+mlp n x1 w1 b1 w2 b2 = hlevel $ clevel x2 w2 b2
+  where x2 = hlevel $ clevel x1 w1 b1
