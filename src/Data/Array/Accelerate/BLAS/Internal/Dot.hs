@@ -1,3 +1,4 @@
+{-# LANGUAGE TemplateHaskell #-}
 module Data.Array.Accelerate.BLAS.Internal.Dot where
 
 import Data.Array.Accelerate.BLAS

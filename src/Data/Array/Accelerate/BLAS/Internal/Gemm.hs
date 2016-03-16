@@ -1,3 +1,4 @@
+{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeOperators #-}
 module Data.Array.Accelerate.BLAS.Internal.Gemm where
 

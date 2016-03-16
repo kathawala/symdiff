@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -threaded #-}
 import Control.Monad (when)    
 import System.Exit (exitFailure)
 import Test.QuickCheck (quickCheckResult)
