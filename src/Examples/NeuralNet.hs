@@ -1,0 +1,29 @@
+module Examples.NeuralNet where
+
+import Data.Array.Accelerate.BLAS.Internal.Dot
+import Data.Array.Accelerate.BLAS.Internal.Gemm
+import Data.Array.Accelerate.BLAS.Internal.Axpy
+import Data.Array.Accelerate hiding (length)
+import Prelude hiding (map, replicate)
+import Data.Array.Accelerate.Interpreter as I
+-- import Data.Array.Accelerate.CUDA as I
+
+toMatrix :: [Float] -> (Int,Int) -> Acc (Matrix Float)
+toMatrix x (rx,cx)           = use (fromList (Z :. rx :. cx) x)
+
+toVector :: [Float] -> Acc (Vector Float)
+toVector x                   = use (fromList (Z :. (length x)) x)
+
+clevel :: Acc (Vector Float) -> Acc (Matrix Float) -> Acc (Vector Float) -> Acc (Vector Float)
+clevel x0 w b  = axpy wTimesX b
+  where 
+    x          = replicate (lift (Z :. All :. (1::Int))) (x0)
+    wTimesX    = slice (gemm w x) (lift (Z :. All :. (0::Int)))
+        
+
+hlevel :: Acc (Vector Float) -> Acc (Vector Float)
+hlevel = map tanh
+
+train n x w b
+  | n == 0     = x 
+  | otherwise  = train (n-1) (hlevel $ clevel x w b) w b
