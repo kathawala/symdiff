@@ -29,10 +29,10 @@ matMul vs = fold (+) 0 $ zipWith (*) arrRepl brrRepl
 cudaGemmF :: Maybe Stream -> (Matrix Float, Matrix Float) -> CIO (Matrix Float)
 cudaGemmF ms (a,b) = do
   traceShowM "cudaGemmF"
-  let Z :. ra :. ca = arrayShape a
-      Z :. rb :. cb  = arrayShape b
+  let Z :. ra :. ca = arrayShape a   -- m k
+      Z :. rb :. cb  = arrayShape b  -- k n
   traceShowM (ra,ca,rb,cb)
-  c <- allocateArray $ Z :. ra :. cb
+  c <- allocateArray $ Z :. ra :. cb -- m n
   withDevicePtrs a ms $ \aptr -> do
     withDevicePtrs b ms $ \bptr -> do
       withDevicePtrs c ms $ \cptr -> do
@@ -51,7 +51,7 @@ cudaGemmF ms (a,b) = do
         -- beta = CFloat 0
         -- c = ptr c
         -- ldc = ca
-        liftIO $ BL.gemm theHandle BL.T BL.T ca cb rb (CFloat 1) (castDevPtr bptr) cb (castDevPtr aptr) ca (CFloat 0) (castDevPtr cptr) ca
+        liftIO $ BL.gemm theHandle BL.N BL.N cb ra rb (CFloat 1) (castDevPtr bptr) cb (castDevPtr aptr) ca (CFloat 0) (castDevPtr cptr) cb
         -- liftIO $ BL.gemm theHandle BL.N BL.N ra cb ca (CFloat 1) (castDevPtr aptr) ra (castDevPtr bptr) rb (CFloat 0) (castDevPtr cptr) ra
         return c
 

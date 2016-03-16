@@ -60,6 +60,7 @@ library
   exposed-modules: Data.Array.Accelerate.BLAS.Internal.Dot
                    Data.Array.Accelerate.BLAS.Internal.Gemm
                    Data.Array.Accelerate.BLAS
+                   Data.Array.Accelerate.Diff
   
   -- Modules included in this library but not exported.
   --other-modules: Data.Array.Accelerate.BLAS.Internal.Dot     
@@ -75,7 +76,7 @@ library
 --0.15.1.1,
                        cuda >=0.7,
                        cublas >= 0.3,
-                       template-haskell >= 2.10
+                       template-haskell >= 2.9
 
   extra-libraries:     cublas
   

@@ -1,12 +1,11 @@
-{-# OPTIONS_GHC -threaded #-}
 import Control.Monad (when)    
 import System.Exit (exitFailure)
 import Test.QuickCheck (quickCheckResult)
 import Test.QuickCheck.Test (isSuccess)
 import Data.Array.Accelerate hiding (all, not, length)
 import Prelude hiding (zipWith)
-import Data.Array.Accelerate.Interpreter as I
-import Data.Array.Accelerate.CUDA as C
+--import Data.Array.Accelerate.Interpreter as I
+import Data.Array.Accelerate.CUDA as I
 import Data.Array.Accelerate.BLAS.Internal.Dot
 import Data.Array.Accelerate.BLAS.Internal.Gemm
 
