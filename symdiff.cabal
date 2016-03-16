@@ -60,6 +60,7 @@ library
   exposed-modules: Data.Array.Accelerate.Diff
                    Data.Array.Accelerate.BLAS.Internal.Dot
                    Data.Array.Accelerate.BLAS.Internal.Gemm
+                   Data.Array.Accelerate.BLAS.Internal.Axpy
                    Data.Array.Accelerate.BLAS
   
   -- Modules included in this library but not exported.
