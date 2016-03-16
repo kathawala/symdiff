@@ -16,8 +16,8 @@ prop_dot_shape v1 v2 = length (toList $ I.run $ sdot (use (fromList (Z:.(length 
 prop_dot_440 :: Bool
 prop_dot_440 = head (toList $ I.run $ sdot (use (fromList (Z:.10) [1..])) (use (fromList (Z:.10) [2..11]))) == 440.0
 
-prop_gemm :: Bool
-prop_gemm = (toList $ I.run $ gemm (use (fromList (Z:.3:.3) [0,5,1,2,6,-1,-4,3,7] :: Array DIM2 Float)) (use (fromList (Z:.3) [8,-2,4] :: Vector Float))) == [-6.0,0.0,-10.0]
+prop_gemv :: Bool
+prop_gemv = (toList $ I.run $ gemv (use (fromList (Z:.3:.3) [0,5,1,2,6,-1,-4,3,7] :: Array DIM2 Float)) (use (fromList (Z:.3) [8,-2,4] :: Vector Float))) == [-6.0,0.0,-10.0]
 
 prop_axpy_integrity :: [Float] -> [Float] -> Bool
 prop_axpy_integrity _ []  = True
@@ -32,7 +32,7 @@ main :: IO ()
 main = do
   let tests = [ quickCheckResult prop_dot_shape,
                 quickCheckResult prop_dot_440,
-                quickCheckResult prop_gemm,
+                quickCheckResult prop_gemv,
                 quickCheckResult prop_axpy_integrity,
                 quickCheckResult prop_axpy
               ]

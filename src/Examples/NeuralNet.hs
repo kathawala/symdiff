@@ -18,8 +18,8 @@ toVector :: [Float] -> Acc (Vector Float)
 toVector x                   = use (fromList (Z :. (length x)) x)
 
 clevel :: Acc (Vector Float) -> Acc (Matrix Float) -> Acc (Vector Float) -> Acc (Vector Float)
-clevel x w b  = axpy (gemm w x) b
-  where 
+clevel x w b  = axpy (gemv w x) b
+  -- where 
     -- x          = replicate (lift (Z :. All :. (1::Int))) (x0)
     -- wTimesX    = slice (gemm w x) (lift (Z :. All :. (0::Int)))
 
