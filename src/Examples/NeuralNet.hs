@@ -8,6 +8,9 @@ import Prelude hiding (map, replicate)
 import Data.Array.Accelerate.Interpreter as I
 -- import Data.Array.Accelerate.CUDA as I
 
+-- example: toMatrix [1,2,3,4] (2,2) gives back:
+       -- [1  2]
+       -- [3  4]
 toMatrix :: [Float] -> (Int,Int) -> Acc (Matrix Float)
 toMatrix x (rx,cx)           = use (fromList (Z :. rx :. cx) x)
 
@@ -24,6 +27,10 @@ clevel x0 w b  = axpy wTimesX b
 hlevel :: Acc (Vector Float) -> Acc (Vector Float)
 hlevel = map tanh
 
+-- train is used as follows
+-- train numTrainingCycles featureVec weightMatrix penaltyVec
+-- vectors and matrices must be initialized using toMatrix and toVector
+train :: Int -> Acc (Vector Float) -> Acc (Matrix Float) -> Acc (Vector Float) -> Acc (Vector Float)
 train n x w b
   | n == 0     = x 
   | otherwise  = train (n-1) (hlevel $ clevel x w b) w b
