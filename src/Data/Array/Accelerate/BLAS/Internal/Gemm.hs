@@ -15,8 +15,9 @@ import Foreign.C.Types
 type Matrix a = Array DIM2 a
 
 pureGemv :: (IsNum e, Elt e) => Acc (Matrix e, Vector e) -> Acc (Vector e)
-pureGemv vs = slice (fold (+) 0 $ zipWith (*) arrRepl brrRepl) (lift (Z :. All :. (0::Int)))
+pureGemv vs = slice result (lift (Z :. All :. (0::Int)))
   where
+    result              = (fold (+) 0 $ zipWith (*) arrRepl brrRepl)
     (arr,brr)           = unlift vs
     bLen                = length brr
     Z :. rowsA :. _     = unlift (shape arr)    :: Z :. Exp Int :. Exp Int
@@ -74,9 +75,15 @@ cudaGevmF ms (a,b) = do
         liftIO $ BL.gemm theHandle BL.N BL.N cb ra 1 (CFloat 1) (castDevPtr bptr) cb (castDevPtr aptr) 1 (CFloat 0) (castDevPtr cptr) cb 
         return c
 
---Wrong
-pureOuter :: (IsNum e, Elt e) => Acc (Vector e, Vector e) -> Acc (Matrix Float) 
-pureOuter _ = use (fromList (Z:.2:.2) [1..] :: Array DIM2 Float)
+pureOuter :: (IsNum e, Elt e) => Acc (Vector e, Vector e) -> Acc (Matrix e) 
+pureOuter vs = zipWith (*) arrRepl brrRepl
+  where
+    (arr,brr) = unlift vs
+    aLen      = length arr
+    bLen      = length brr
+
+    arrRepl   = replicate (lift $ Z:. All  :. bLen) arr
+    brrRepl   = replicate (lift $ Z:. aLen :.  All) brr
 
 cudaOuterF :: Maybe Stream -> (Vector Float, Vector Float) -> CIO (Matrix Float)
 cudaOuterF ms (a,b) = do
@@ -88,8 +95,7 @@ cudaOuterF ms (a,b) = do
     withDevicePtrs b ms $ \bptr -> do
       withDevicePtrs c ms $ \cptr -> do
         liftIO $ BL.gemm theHandle BL.T BL.N cb ra 1 (CFloat 1) (castDevPtr bptr) cb (castDevPtr aptr) 1 (CFloat 0) (castDevPtr cptr) cb 
-        return c
-  
+        return c  
 
 gemv :: Acc (Matrix Float) -> Acc (Vector Float) -> Acc (Vector Float)
 gemv v1 v2 = foreignAcc cudaGemv pureGemv $ lift (v1,v2)
