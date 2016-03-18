@@ -52,7 +52,7 @@ cudaGemvF ms (a,b) = do
 
 -- Wrong answer
 pureGevm :: (IsNum e, Elt e) => Acc (Vector e, Matrix e) -> Acc (Vector e)
-pureGevm vs = slice (fold (+) 0 $ zipWith (*) arrRepl brrRepl) (lift (Z :. All :. (0::Int)))
+pureGevm vs = slice result (lift (Z :. (0::Int) :. All))
   where
     result              = (fold (+) 0 $ zipWith (*) arrRepl brrRepl)
     (arr,brr)           = unlift vs
@@ -60,7 +60,7 @@ pureGevm vs = slice (fold (+) 0 $ zipWith (*) arrRepl brrRepl) (lift (Z :. All :
     Z :. _ :. colB      = unlift (shape brr)    :: Z :. Exp Int :. Exp Int
 
     arrMat              = reshape   (lift $ Z:. (1::Int)  :. aLen)            arr
-    arrRepl             = replicate (lift $ Z:. All       :. (1::Int) :. All) arrMat
+    arrRepl             = replicate (lift $ Z:. All       :. colB     :. All) arrMat
     brrRepl             = replicate (lift $ Z:. (1::Int)  :. All      :. All) (transpose brr)
 
 cudaGevmF :: Maybe Stream -> (Vector Float, Matrix Float) -> CIO (Vector Float)
@@ -75,6 +75,7 @@ cudaGevmF ms (a,b) = do
         liftIO $ BL.gemm theHandle BL.N BL.N cb ra 1 (CFloat 1) (castDevPtr bptr) cb (castDevPtr aptr) 1 (CFloat 0) (castDevPtr cptr) cb 
         return c
 
+--Wrong
 pureOuter :: (IsNum e, Elt e) => Acc (Vector e, Vector e) -> Acc (Matrix Float) 
 pureOuter _ = use (fromList (Z:.2:.2) [1..] :: Array DIM2 Float)
 
