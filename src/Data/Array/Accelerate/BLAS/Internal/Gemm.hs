@@ -50,7 +50,6 @@ cudaGemvF ms (a,b) = do
         liftIO $ BL.gemm theHandle BL.N BL.N 1 ra rb (CFloat 1) (castDevPtr bptr) 1 (castDevPtr aptr) ca (CFloat 0) (castDevPtr cptr) 1
         return c
 
--- Wrong answer
 pureGevm :: (IsNum e, Elt e) => Acc (Vector e, Matrix e) -> Acc (Vector e)
 pureGevm vs = slice result (lift (Z :. (0::Int) :. All))
   where
