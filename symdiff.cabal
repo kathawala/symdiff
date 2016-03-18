@@ -62,7 +62,7 @@ library
                    Data.Array.Accelerate.BLAS.Internal.Gemm
                    Data.Array.Accelerate.BLAS.Internal.Axpy
                    Data.Array.Accelerate.BLAS
-                   Examples.NeuralNet
+                   --Examples.NeuralNet
   
   -- Modules included in this library but not exported.
   --other-modules: Data.Array.Accelerate.BLAS.Internal.Dot     

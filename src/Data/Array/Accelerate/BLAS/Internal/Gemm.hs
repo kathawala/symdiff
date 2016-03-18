@@ -13,6 +13,9 @@ import Foreign.C.Types
 -- import Debug.Trace
 
 type Matrix a = Array DIM2 a
+type Scal = Acc (Scalar Float)
+type Vect = Acc (Vector Float)
+type Matr = Acc (Matrix Float)
 
 matMul :: (IsNum e, Elt e) => Acc (Matrix e, Vector e) -> Acc (Vector e)
 matMul vs = slice (fold (+) 0 $ zipWith (*) arrRepl brrRepl) (lift (Z :. All :. (0::Int)))
