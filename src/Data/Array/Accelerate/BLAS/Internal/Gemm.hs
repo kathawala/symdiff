@@ -1,9 +1,10 @@
 {-# LANGUAGE TypeOperators #-}
 module Data.Array.Accelerate.BLAS.Internal.Gemm where
 
-import Data.Array.Accelerate.BLAS
-import Data.Array.Accelerate.CUDA
 import Data.Array.Accelerate
+import Data.Array.Accelerate.BLAS
+import Data.Array.Accelerate.BLAS.Internal.Types
+import Data.Array.Accelerate.CUDA
 import Data.Array.Accelerate.CUDA.Foreign
 import Prelude hiding (zipWith,fold,all,replicate, length, (++))
 import Foreign.CUDA.Ptr
@@ -11,8 +12,6 @@ import qualified Foreign.CUDA.Cublas as BL
 import qualified Foreign.CUDA.Cublas.FFI as BLF
 import Foreign.C.Types
 -- import Debug.Trace
-
-type Matrix a = Array DIM2 a
 
 pureGemv :: (IsNum e, Elt e) => Acc (Matrix e, Vector e) -> Acc (Vector e)
 pureGemv vs = slice result (lift (Z :. All :. (0::Int)))
@@ -97,16 +96,16 @@ cudaOuterF ms (a,b) = do
         liftIO $ BL.gemm theHandle BL.T BL.N cb ra 1 (CFloat 1) (castDevPtr bptr) cb (castDevPtr aptr) 1 (CFloat 0) (castDevPtr cptr) cb 
         return c  
 
-gemv :: Acc (Matrix Float) -> Acc (Vector Float) -> Acc (Vector Float)
-gemv v1 v2 = foreignAcc cudaGemv pureGemv $ lift (v1,v2)
+gemv :: (Matr, Vect) -> Vect
+gemv (v1,v2) = foreignAcc cudaGemv pureGemv $ lift (v1,v2)
   where cudaGemv = CUDAForeignAcc "cudaGemvF" (\stream -> cudaGemvF (Just stream))
 
-gevm :: Acc (Vector Float) -> Acc (Matrix Float) -> Acc (Vector Float)
-gevm v1 v2 = foreignAcc cudaGevm pureGevm $ lift (v1,v2)
+gevm :: (Vect, Matr) -> Vect
+gevm (v1,v2) = foreignAcc cudaGevm pureGevm $ lift (v1,v2)
   where cudaGevm = CUDAForeignAcc "cudaGevmF" (\stream -> cudaGevmF (Just stream))
 
-outer :: Acc (Vector Float) -> Acc (Vector Float) -> Acc (Matrix Float)
-outer v1 v2 = foreignAcc cudaOuter pureOuter $ lift (v1,v2)
+outer :: (Vect, Vect) -> Matr
+outer (v1,v2) = foreignAcc cudaOuter pureOuter $ lift (v1,v2)
   where cudaOuter = CUDAForeignAcc "cudaOuterF" (\stream -> cudaOuterF (Just stream)) 
 
 test = do
@@ -114,4 +113,4 @@ test = do
  let x = fromList (Z:.3:.3) [0,5,1,2,6,-1,-4,3,7] :: Array DIM2 Float
  let y = fromList (Z:.3) [8,-2,4]                 :: Array DIM1 Float
 
- run $ gemv (use x) (use y)
+ run $ gemv ((use x),(use y))

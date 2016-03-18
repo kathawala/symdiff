@@ -1,6 +1,7 @@
 module Data.Array.Accelerate.BLAS.Internal.Dot where
 
 import Data.Array.Accelerate.BLAS
+import Data.Array.Accelerate.BLAS.Internal.Types
 import Data.Array.Accelerate.CUDA
 import Data.Array.Accelerate
 import Data.Array.Accelerate.CUDA.Foreign
@@ -39,8 +40,8 @@ cudaDotProductF ms (v1,v2) = do
           -- traceShowM oarr
           return oarr
 
-sdot :: Acc (Vector Float) -> Acc (Vector Float) -> Acc (Scalar Float)
-sdot v1 v2 = foreignAcc cudaDot pureDot $ lift (v1,v2)
+sdot :: (Vect,Vect) -> Scal
+sdot (v1,v2) = foreignAcc cudaDot pureDot $ lift (v1,v2)
   where cudaDot = CUDAForeignAcc "cudaDotProductF" (\stream -> cudaDotProductF (Just stream))
         pureDot :: Acc (Vector Float, Vector Float) -> Acc (Scalar Float)
         pureDot vs = let (u,v) = unlift vs
@@ -50,4 +51,4 @@ test = do
   let x = fromList (Z:.10) [1..10] :: Vector Float
   let y = fromList (Z:.10) [2..11] :: Vector Float
 
-  run $ sdot (use x) (use y)
+  run $ sdot ((use x), (use y))
