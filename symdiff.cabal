@@ -77,7 +77,8 @@ library
                        accelerate-cuda >=2.0,
 --0.15.1.1,
                        cuda >=0.7,
-                       cublas >= 0.3
+                       cublas >= 0.3,
+                       containers >= 0.5
 
   extra-libraries:     cublas
   

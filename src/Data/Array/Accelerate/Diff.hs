@@ -10,7 +10,7 @@
 module Data.Array.Accelerate.Diff where
 
 import Prelude hiding (map, zipWith)
-import Data.Array.Accelerate hiding ((++),(!!),collect,reverse)
+import Data.Array.Accelerate hiding ((++),(!!),collect,reverse,length)
 import qualified Data.Array.Accelerate.AST as AST
 import Data.Array.Accelerate.Smart as Smart
 import Data.Array.Accelerate.Trafo as Trafo
@@ -26,7 +26,7 @@ import Data.Array.Accelerate.BLAS.Internal.Axpy (axpy)
 import Debug.Trace
 import Data.Coerce
 import Data.Dynamic
-import qualified Data.Vector as V
+import qualified Data.Sequence as S
 
 testfn :: (Vect, Vect) -> Scal
 testfn (u,v) = sdot ((map tanh u), v)
@@ -38,6 +38,7 @@ mlp x (w1,b1,w2,b2) = layer w2 b2 $ layer w1 b1 x where
 data Param
    = Weight     Matr
    | Bias       Vect
+   deriving Show
 
 --liftAfun :: (Plain a -> Acc b) -> (Acc c -> Acc b)
 liftAfun :: Unlift Acc a => (a -> b) -> (Acc (Plain a) -> b)
@@ -69,7 +70,7 @@ diff :: (Unlift Acc a, Arrays (Plain a))
   => (a -> Vect)
   -> Vect
   -> [Param]
-  -> IO Vect
+  -> (Vect,S.Seq (Maybe Param))
 diff f dout params = diffAcc (prepareAfun f) dout params
 
 --maybe make this an IO and have it emit Acc expressions for each tag it encounters
@@ -78,126 +79,93 @@ diffAcc :: forall arrs.
   Vect
   -> Vect
   -> [Param]
-  -> IO Vect 
+  -> (Vect,S.Seq (Maybe Param))
 diffAcc self dout params = case toPreAcc self of
-  -- PreAcc Acc Seq Exp (Plain (Matr, Vect, Matr, Vect))
-  Atag i                          -> trace "Atag" $ undefined -- Atag i -- AST.Avar (prjIdx ("de Bruijn conversion tag " ++ show i) i alyt)
-  Pipe afun1 afun2 acc            -> trace "Pipe" $ undefined -- Pipe afun1 afun2 acc 
-
-  --Aforeign ff afun acc            -> trace "diffAcc:Aforeign" $ (res,dparams) where -- Aforeign ff afun acc where
-  --  (res,dparams) = case strForeign ff of
-  --    "axpy" -> trace "Aforeign:axpy" $ 
-
-  Aforeign ff@(strForeign -> "axpy") afun
-    (toPreAcc -> Atuple (SnocAtup (SnocAtup NilAtup arg1') arg2')) -> trace "diffAcc:axpy" $ outval where
-      outval = do
-        res1' <- res1
-        res2' <- res2
-        return $ axpy (res1', res2')
+  --Atag i                          -> AST.Avar (prjIdx ("de Bruijn conversion tag " ++ show i) i alyt)
+  --Pipe afun1 afun2 acc            -> Pipe afun1 afun2 acc 
+  Aforeign (strForeign -> "axpy") _
+    (toPreAcc -> Atuple (SnocAtup (SnocAtup NilAtup arg1') arg2')) -> trace "diffAcc:axpy" $ (outval,dparams) where
+      outval = axpy (res1, res2)
       arg1 = case (fromDynamic $ toDyn arg1') :: Maybe Vect of
         Nothing -> trace "diffAcc:axpy!type mismatch" $ undefined
         Just fn -> fn
       arg2 = case (fromDynamic $ toDyn arg2') :: Maybe Vect of
         Nothing -> trace "diffAcc:axpy!type mismatch" $ undefined
         Just fn -> fn
-      res1 = diffAcc arg1 dout params
-      res2 = diffAcc arg2 dout params
-
-  Aforeign ff@(strForeign -> "gemv") afun
-    (toPreAcc -> Atuple (SnocAtup (SnocAtup NilAtup argm') argv')) -> do
-      traceM "diffAcc:gemv"
-      let argm = case (fromDynamic $ toDyn argm') :: Maybe Matr of
-                  Nothing -> trace "diffAcc:gemv!type mismatch" $ undefined
-                  Just fn -> fn
-      let argv = case (fromDynamic $ toDyn argv') :: Maybe Vect of
-                  Nothing -> trace "diffAcc:gemv!type mismatch" $ undefined
-                  Just fn -> fn
-      let ix = case toPreAcc argm of
-                  Aprj (toInt -> ix') (toPreAcc -> Atag 0) -> ix'
-      let resm = case params !! ix of
-                  Weight w -> w
-                  Bias b -> trace "diffAcc:gemv!bias in weight slot" $ undefined
-      resv <- diffAcc argv (gevm (dout, resm)) params
-      traceM $ "diffAcc:gemv:Aprj: gradient for parameter " ++ show ix ++ " is ("
-      traceShowM $ gevv (dout, resv)
-      traceM $ ")"
-      return $ gemv (resm, resv)
-
-  --Acond b acc1 acc2               -> trace "Acond" $ Acond b acc1 acc2       -- AST.Acond (cvtE b) (cvtA acc1) (cvtA acc2)
-  --Awhile pred iter init           -> trace "Awhile" $ Awhile pred iter init      -- AST.Awhile (cvtAfun1 pred) (cvtAfun1 iter) (cvtA init)
-  Atuple arrs                     -> trace "Atuple" $ undefined --Atuple arrs      -- AST.Atuple (convertSharingAtuple config alyt aenv' arrs)
-  Aprj (toInt -> ix) (toPreAcc -> Atag 0) -> do
-    traceM $ "diffAcc:Aprj: gradient for parameter " ++ show ix ++ " is ("
-    traceShowM dout
-    traceM $ ")"
-    return $ case params !! ix of
+      (res1,dparams1) = diffAcc arg1 dout params
+      (res2,dparams2) = diffAcc arg2 dout params
+      dparams = S.zipWith accum dparams1 dparams2
+  Aforeign (strForeign -> "gemv") _
+    (toPreAcc -> Atuple (SnocAtup (SnocAtup NilAtup argm') argv')) -> trace "diffAcc:gemv" $ (outval,dparams) where
+      argm = case (fromDynamic $ toDyn argm') :: Maybe Matr of
+        Nothing -> trace "diffAcc:gemv!type mismatch" $ undefined
+        Just fn -> fn
+      argv = case (fromDynamic $ toDyn argv') :: Maybe Vect of
+        Nothing -> trace "diffAcc:gemv!type mismatch" $ undefined
+        Just fn -> fn
+      ix = case toPreAcc argm of
+        Aprj (toInt -> ix') (toPreAcc -> Atag 0) -> ix'
+      resm = case params !! ix of
+        Weight w -> w
+        Bias b -> trace "diffAcc:gemv!bias in weight slot" $ undefined
+      (resv,dparamsv) = diffAcc argv (gevm (dout, resm)) params
+      dparams = S.adjust (accum $ Just . Weight $ gevv (dout, resv)) ix dparamsv
+      outval = gemv (resm, resv)
+  --Acond b acc1 acc2               -> AST.Acond (cvtE b) (cvtA acc1) (cvtA acc2)
+  --Awhile pred iter init           -> AST.Awhile (cvtAfun1 pred) (cvtAfun1 iter) (cvtA init)
+  --Atuple arrs                     -> AST.Atuple (convertSharingAtuple config alyt aenv' arrs)
+  Aprj (toInt -> ix) (toPreAcc -> Atag 0) -> trace "diffAcc:Aprj" $ (outval,dparams) where
+    dparams = S.adjust (accum $ Just $ Bias dout) ix $ S.replicate (length params) Nothing
+    outval = case params !! ix of
       Weight w -> trace "diffAcc:Aprj!weight in bias slot" $ undefined
       Bias b -> b
-
-  Use array                       -> do
-    traceM "Use"
-    return $ use array -- Use array         -- AST.Use (fromArr array)
-  --Unit e                          -> trace "Unit" $ undefined -- Unit e        -- AST.Unit (cvtE e)
-  Generate sh f                   -> trace "Generate" $ undefined -- Generate sh f    -- AST.Generate (cvtE sh) (cvtF1 f)
-  --Reshape e acc                   -> trace "Reshape" $ Reshape e acc      -- AST.Reshape (cvtE e) (cvtA acc)
-  --Replicate ix acc                -> trace "Replicate" $ Replicate ix acc   -- mkReplicate (cvtE ix) (cvtA acc)
-  --Slice acc ix                    -> trace "Slice" $ Slice acc ix        -- mkIndex (cvtA acc) (cvtE ix)
-
-  Map fn'@(prepareEfun -> f) acc -> trace "diffAcc:Map" $ outval where
+  Use array                       -> trace "diffAcc:Use" $ (outval,dparams) where
+    outval = use array
+    dparams = S.replicate (length params) Nothing
+  --Unit e                          -> AST.Unit (cvtE e)
+  --Generate sh f                   -> AST.Generate (cvtE sh) (cvtF1 f)
+  --Reshape e acc                   -> AST.Reshape (cvtE e) (cvtA acc)
+  --Replicate ix acc                -> mkReplicate (cvtE ix) (cvtA acc)
+  --Slice acc ix                    -> mkIndex (cvtA acc) (cvtE ix)
+  Map fn'@(prepareEfun -> f) acc -> trace "diffAcc:Map" $ (outval,dparams) where
     fn = case (fromDynamic $ toDyn fn') :: Maybe (Exp Float -> Exp Float) of
       Nothing -> trace "diffAcc:Map!type mismatch" $ undefined
       Just fn -> fn
-    outval = do
-      inval' <- inval
-      return . toAcc $ Map fn inval' --acc
+    outval = map fn inval
     --(inval,dparams) = diffAcc acc (toAcc $ Map (diffExp f) dout) params
-    inval = case (fromDynamic $ toDyn acc) :: Maybe Vect of 
+    (inval,dparams) = case (fromDynamic $ toDyn acc) :: Maybe Vect of 
       Nothing -> trace "diffAcc:Map!size mismatch" $ undefined
-      Just acc' -> diffAcc acc' (toAcc $ Map (diffExp f) dout) params
-
-  --  f' = prepareEfun f
-  --  df = case f' of
-  --    PrimApp p e -> case p of
-  --                    AST.PrimTanh _ -> \x -> 1 - (tanh x) ** 2
-  --                    otherwise -> undefined
-  --  df = case f of
-  --    DiffExpFn f' -> diffExpFn f'
-  --    BadExpFn f' -> undefine
-       -- Map f acc          -- AST.Map (cvtF1 f) (cvtA acc)
-  -- f :: Exp e -> Exp e'
-  --ZipWith f acc1 acc2             -> trace "ZipWith" $ ZipWith f acc1 acc2     -- AST.ZipWith (cvtF2 f) (cvtA acc1) (cvtA acc2)
-  --Fold f e acc                    -> trace "Fold" $ Fold f e acc         -- AST.Fold (cvtF2 f) (cvtE e) (cvtA acc)
-  --Fold1 f acc                     -> trace "Fold1" $ Fold1 f acc        -- AST.Fold1 (cvtF2 f) (cvtA acc)
-  --FoldSeg f e acc1 acc2           -> trace "FoldSeg" $ FoldSeg f e acc1 acc2     -- AST.FoldSeg (cvtF2 f) (cvtE e) (cvtA acc1) (cvtA acc2)
-  --Fold1Seg f acc1 acc2            -> trace "Fold1Seg" $ Fold1Seg f acc1 acc2    -- AST.Fold1Seg (cvtF2 f) (cvtA acc1) (cvtA acc2)
-  --Scanl f e acc                   -> trace "Scanl" $ Scanl f e acc       -- AST.Scanl (cvtF2 f) (cvtE e) (cvtA acc)
---  Scanl' f e acc                  -> trace "Scanl'" $ Scanl' f e acc      -- AST.Scanl' (cvtF2 f) (cvtE e) (cvtA acc)
-  --Scanl1 f acc                    -> trace "Scanl1" $ Scanl1 f acc      -- AST.Scanl1 (cvtF2 f) (cvtA acc)
-  --Scanr f e acc                   -> trace "Scanr" $ Scanr f e acc       -- AST.Scanr (cvtF2 f) (cvtE e) (cvtA acc)
---  Scanr' f e acc                  -> trace "Scanr'" $ Scanr' f e acc      -- AST.Scanr' (cvtF2 f) (cvtE e) (cvtA acc)
-  --Scanr1 f acc                    -> trace "Scanr1" $ Scanr1 f acc      -- AST.Scanr1 (cvtF2 f) (cvtA acc)
-  Permute f dftAcc perm acc       -> trace "Permute" $ undefined --Permute f dftAcc perm acc     -- AST.Permute (cvtF2 f) (cvtA dftAcc) (cvtF1 perm) (cvtA acc)
-  Backpermute newDim perm acc     -> trace "Backpermute" $ undefined --Backpermute newDim perm acc -- AST.Backpermute (cvtE newDim) (cvtF1 perm) (cvtA acc)
-  Stencil stencil boundary acc    -> trace "Stencil" $ undefined -- Stencil stencil boundary acc
-  Stencil2 stencil bndy1 acc1 bndy2 acc2
-    -> trace "Stencil2" $ undefined -- Stencil2 stencil bndy1 acc1 bndy2 acc2
-  Collect seq                     -> trace "Collect" $ undefined -- Collect seq      -- AST.Collect (convertSharingSeq config alyt EmptyLayout aenv' [] seq)
-  otherwise -> trace "diffAcc:otherwise" undefined
-
---combine :: (Acc ta, arrs) -> (Acc ta, arrs) -> (Acc ta, arrs)
---combine (a, dp1) (b, dp2) = (val, merge dp1 dp2) where
---  val = toAcc $ Atuple (SnocAtup (SnocAtup NilAtup a) b)
---  merge NilAtup NilAtup = NilAtup
---  merge (SnocAtup rest1 snoc1) (SnocAtup rest2 snoc2) = 
---    (SnocAtup (merge rest1 rest2) $ zipWith (+) snoc1 snoc2) -- add cond for zero
-
---combine :: Vect -> Vect -> TupleRepr (Vect, Vect)-- (((), Array DIM1 Float), Array DIM1 Float)
---combine a b = toAcc $ Atuple (SnocAtup (SnocAtup NilAtup a) b)
+      Just acc' -> diffAcc acc' (map (diffExp f) dout) params
+  --ZipWith f acc1 acc2             -> AST.ZipWith (cvtF2 f) (cvtA acc1) (cvtA acc2)
+  --Fold f e acc                    -> AST.Fold (cvtF2 f) (cvtE e) (cvtA acc)
+  --Fold1 f acc                     -> AST.Fold1 (cvtF2 f) (cvtA acc)
+  --FoldSeg f e acc1 acc2           -> AST.FoldSeg (cvtF2 f) (cvtE e) (cvtA acc1) (cvtA acc2)
+  --Fold1Seg f acc1 acc2            -> AST.Fold1Seg (cvtF2 f) (cvtA acc1) (cvtA acc2)
+  --Scanl f e acc                   -> AST.Scanl (cvtF2 f) (cvtE e) (cvtA acc)
+  --Scanl' f e acc                  -> AST.Scanl' (cvtF2 f) (cvtE e) (cvtA acc)
+  --Scanl1 f acc                    -> AST.Scanl1 (cvtF2 f) (cvtA acc)
+  --Scanr f e acc                   -> AST.Scanr (cvtF2 f) (cvtE e) (cvtA acc)
+  --Scanr' f e acc                  -> AST.Scanr' (cvtF2 f) (cvtE e) (cvtA acc)
+  --Scanr1 f acc                    -> AST.Scanr1 (cvtF2 f) (cvtA acc)
+  --Permute f dftAcc perm acc       -> AST.Permute (cvtF2 f) (cvtA dftAcc) (cvtF1 perm) (cvtA acc)
+  --Backpermute newDim perm acc     -> AST.Backpermute (cvtE newDim) (cvtF1 perm) (cvtA acc)
+  --Stencil stencil boundary acc    -> Stencil stencil boundary acc
+  --Stencil2 stencil bndy1 acc1 bndy2 acc2 -> Stencil2 stencil bndy1 acc1 bndy2 acc2
+  --Collect seq                     -> AST.Collect (convertSharingSeq config alyt EmptyLayout aenv' [] seq)
+  otherwise -> trace "diffAcc!otherwise" undefined
 
 --dyncast :: (Typeable ta, Typeable tb) => forall ta tb. ta -> tb -> ta
 --dyncast a b = case (fromDynamic $ toDyn b) `asTypeOf` Just a of
 --  Nothing -> trace "dyncast!type mismatch" $ undefined
 --  Just c -> c
+
+accum grad1 grad2 = case (grad1,grad2) of
+  (Nothing,Nothing) -> Nothing
+  (Nothing,Just a) -> Just a
+  (Just a,Nothing) -> Just a 
+  (Just (Bias vect1),Just (Bias vect2)) -> Just $ Bias $ zipWith (+) vect1 vect2
+  (Just (Weight matr1),Just (Weight matr2)) -> Just $ Weight $ zipWith (+) matr1 matr2
+  otherwise -> error "accum!type mismatch"
 
 diffExp :: Exp Float -> (Exp Float -> Exp Float)
 diffExp f = case toPreExp f of
@@ -228,55 +196,55 @@ test = do
   --traceShowM $ I.run1 (liftAfun testfn) (x,y)
 
   traceShowM $ liftAfun $ mlp $ use x
-  r <- diff (mlp $ use x) (use dz)
+  traceShowM $ diff (mlp $ use x) (use dz)
     $ reverse [Weight $ use w,Bias $ use x,Weight $ use v,Bias $ use y]
   -- w :: Acc (Aprj (SuccTupIdx ...) _)
   --   :: Acc (Aprj (SuccTupIdx ...) (Acc (Atag ...)))
   -- h :: Acc (Aprj ZeroTupIdx _)
 
-  let r = toPreAcc $ prepareAfun $ mlp $ use x
-  () <- case r of
-    Map f acc -> do
-      --traceShowM acc
-      () <- case toPreExp $ prepareEfun f of
-        Tag i -> traceM "Tag"
-        Const c -> traceM "Const"
-        Tuple tup -> traceM "Tuple"
-        Prj i e -> traceM "Prj"
-        --IndexNil -> traceM "IndexNil"
-        PrimConst c -> traceM "PrimConst"
-        PrimApp p e -> do
-          traceM "PrimApp"
-          () <- case p of
-            AST.PrimTanh _ -> traceM "PrimTanh"
-          let ex = toPreExp e
-          case ex of
-            Tag i -> traceShowM i
-            otherwise -> traceM "otherwise2"
-        Index a e -> traceM "Index"
-        otherwise -> traceM "otherwise"
-      case toPreAcc acc of 
-        Aforeign (strForeign -> "axpy") afun (toPreAcc -> Atuple (SnocAtup (SnocAtup NilAtup arg1) arg2)) -> do
-          --let c = collect $ arrs
-          --let tup = tuple . collect arrs
-          --let blah = arrs :: Int
-          --traceShowM $ arg1
-          --traceShowM $ arg2
-          () <- case toPreAcc arg1 of
-            Atag i -> traceShowM i
-            Aforeign ff afun arrs -> traceM $ strForeign ff
-            Aprj (toInt -> ix) (toPreAcc -> Atag i) -> do
-              traceShowM (i,ix) -- i: var index, ix: tuple index
-          case toPreAcc arg2 of
-            Atag i -> traceShowM i
-            Aforeign ff afun arrs -> traceM $ strForeign ff
-            Aprj ix a -> traceM "Aprj"
-          --case toPreAcc acc2 of
-          --  Map f acc -> traceM "Map"
-          --  Aforeign ff2 afun2 acc3 -> traceM $ strForeign ff2
-          --  Atuple arrs -> traceM "Atuple"
-          --  otherwise -> traceM "otherwise4"
-        otherwise -> traceM "otherwise3"
+  --let r = toPreAcc $ prepareAfun $ mlp $ use x
+  --() <- case r of
+  --  Map f acc -> do
+  --    --traceShowM acc
+  --    () <- case toPreExp $ prepareEfun f of
+  --      Tag i -> traceM "Tag"
+  --      Const c -> traceM "Const"
+  --      Tuple tup -> traceM "Tuple"
+  --      Prj i e -> traceM "Prj"
+  --      --IndexNil -> traceM "IndexNil"
+  --      PrimConst c -> traceM "PrimConst"
+  --      PrimApp p e -> do
+  --        traceM "PrimApp"
+  --        () <- case p of
+  --          AST.PrimTanh _ -> traceM "PrimTanh"
+  --        let ex = toPreExp e
+  --        case ex of
+  --          Tag i -> traceShowM i
+  --          otherwise -> traceM "otherwise2"
+  --      Index a e -> traceM "Index"
+  --      otherwise -> traceM "otherwise"
+  --    case toPreAcc acc of 
+  --      Aforeign (strForeign -> "axpy") afun (toPreAcc -> Atuple (SnocAtup (SnocAtup NilAtup arg1) arg2)) -> do
+  --        --let c = collect $ arrs
+  --        --let tup = tuple . collect arrs
+  --        --let blah = arrs :: Int
+  --        --traceShowM $ arg1
+  --        --traceShowM $ arg2
+  --        () <- case toPreAcc arg1 of
+  --          Atag i -> traceShowM i
+  --          Aforeign ff afun arrs -> traceM $ strForeign ff
+  --          Aprj (toInt -> ix) (toPreAcc -> Atag i) -> do
+  --            traceShowM (i,ix) -- i: var index, ix: tuple index
+  --        case toPreAcc arg2 of
+  --          Atag i -> traceShowM i
+  --          Aforeign ff afun arrs -> traceM $ strForeign ff
+  --          Aprj ix a -> traceM "Aprj"
+  --        --case toPreAcc acc2 of
+  --        --  Map f acc -> traceM "Map"
+  --        --  Aforeign ff2 afun2 acc3 -> traceM $ strForeign ff2
+  --        --  Atuple arrs -> traceM "Atuple"
+  --        --  otherwise -> traceM "otherwise4"
+  --      otherwise -> traceM "otherwise3"
 
 
 
