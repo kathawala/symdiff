@@ -1,6 +1,7 @@
 module Data.Array.Accelerate.BLAS.Internal.Axpy where
 
 import Data.Array.Accelerate.BLAS
+import Data.Array.Accelerate.BLAS.Internal.Types
 import Data.Array.Accelerate.CUDA
 import Data.Array.Accelerate
 import Data.Array.Accelerate.CUDA.Foreign
@@ -24,8 +25,8 @@ cudaAxpyF ms (v1,v2) = do
         liftIO $ BL.axpy theHandle n (CFloat 1) (castDevPtr v1ptr) 1 (castDevPtr v3ptr) 1
         return v3
 
-axpy :: Acc (Vector Float) -> Acc (Vector Float) -> Acc (Vector Float)
-axpy v1 v2 = foreignAcc cudaAxpy pureAxpy $ lift (v1,v2)
+axpy :: (Vect,Vect) -> Vect
+axpy (v1,v2) = foreignAcc cudaAxpy pureAxpy $ lift (v1,v2)
   where cudaAxpy = CUDAForeignAcc "axpy" (\stream -> cudaAxpyF (Just stream))
         pureAxpy :: Acc (Vector Float, Vector Float) -> Acc (Vector Float)
         pureAxpy vs = let (u,v) = unlift vs
@@ -35,4 +36,3 @@ test = do
   let x = fromList (Z:.5) [2,4,6,8,10] :: Vector Float
   let y = fromList (Z:.5) [1..5]       :: Vector Float
   run $ axpy (use x) (use y)
-  --run1 axpy (x,y)
