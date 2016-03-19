@@ -35,4 +35,4 @@ axpy (v1,v2) = foreignAcc cudaAxpy pureAxpy $ lift (v1,v2)
 test = do
   let x = fromList (Z:.5) [2,4,6,8,10] :: Vector Float
   let y = fromList (Z:.5) [1..5]       :: Vector Float
-  run $ axpy (use x) (use y)
+  run $ axpy (use x, use y)

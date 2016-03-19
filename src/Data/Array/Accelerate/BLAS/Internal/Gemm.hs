@@ -104,8 +104,8 @@ gevm :: (Vect, Matr) -> Vect
 gevm (v1,v2) = foreignAcc cudaGevm pureGevm $ lift (v1,v2)
   where cudaGevm = CUDAForeignAcc "gevm" (\stream -> cudaGevmF (Just stream))
 
-outer :: (Vect, Vect) -> Matr
-outer (v1,v2) = foreignAcc cudaOuter pureOuter $ lift (v1,v2)
+gevv :: (Vect, Vect) -> Matr
+gevv (v1,v2) = foreignAcc cudaOuter pureOuter $ lift (v1,v2)
   where cudaOuter = CUDAForeignAcc "gevv" (\stream -> cudaOuterF (Just stream)) 
 
 test = do
@@ -113,4 +113,4 @@ test = do
  let x = fromList (Z:.3:.3) [0,5,1,2,6,-1,-4,3,7] :: Array DIM2 Float
  let y = fromList (Z:.3) [8,-2,4]                 :: Array DIM1 Float
 
- run $ gemv ((use x),(use y))
+ run $ gemv (use x,use y)
