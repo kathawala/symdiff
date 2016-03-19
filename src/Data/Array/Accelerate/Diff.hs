@@ -18,23 +18,22 @@ import Data.Array.Accelerate.Interpreter as I
 import Data.Array.Accelerate.Array.Sugar as Sugar hiding (Atuple)
 import Data.Array.Accelerate.Product as Product
 
+import Data.Array.Accelerate.BLAS.Internal.Types
 import Data.Array.Accelerate.BLAS.Internal.Dot (sdot)
-import Data.Array.Accelerate.BLAS.Internal.Gemm (gemm, Matr, Vect, Scal)
+import Data.Array.Accelerate.BLAS.Internal.Gemm (gemv, gevm, gevv)
 import Data.Array.Accelerate.BLAS.Internal.Axpy (axpy)
 
 import Debug.Trace
 import Data.Coerce
 import Data.Dynamic
 
-tupdot :: (Vect, Vect) -> Scal
-tupdot (u,v) = sdot u v
 
 testfn :: (Vect, Vect) -> Scal
-testfn (u,v) = sdot (map tanh u) v
+testfn (u,v) = sdot ((map tanh u), v)
 
 mlp :: Vect -> (Matr, Vect, Matr, Vect) -> Vect
 mlp x (w1,b1,w2,b2) = layer w2 b2 $ layer w1 b1 x where
-	layer w b h = map tanh $ axpy b (gemm w h)
+	layer w b h = map tanh $ axpy (b, (gemv (w,h)))
 
 --mlp :: Acc (Vector Float, Vector Float) -> Acc (Vector Float)
 --mlp vs = axpy b1 b2 where
@@ -203,19 +202,19 @@ prepareEfun f = f $ Exp $ Tag 0
 
 --diff :: (a -> Acc b) -> Acc b -> String
 diff :: (Unlift Acc a, Arrays (Plain a))
-  => (a -> Acc (Array sh Float))
-  -> Acc (Array sh Float)
+  => (a -> Vect)
+  -> Vect
   -> a
-  -> IO (Acc (Array sh Float)) 
+  -> IO Vect
 diff f dout params = diffAcc (prepareAfun f) dout params
 
 --maybe make this an IO and have it emit Acc expressions for each tag it encounters
 --but continue to have the return type of the overall Acc
-diffAcc :: forall sh arrs.
-  Acc (Array sh Float)
-  -> Acc (Array sh Float)
+diffAcc :: forall arrs.
+  Vect
+  -> Vect
   -> arrs
-  -> IO (Acc (Array sh Float)) 
+  -> IO Vect 
 diffAcc self dout params = case toPreAcc self of
   -- PreAcc Acc Seq Exp (Plain (Matr, Vect, Matr, Vect))
   --Atag i                          -> trace "Atag" $ Atag i -- AST.Avar (prjIdx ("de Bruijn conversion tag " ++ show i) i alyt)
@@ -228,17 +227,13 @@ diffAcc self dout params = case toPreAcc self of
   Aforeign ff@(strForeign -> "axpy") afun
     (toPreAcc -> Atuple (SnocAtup (SnocAtup NilAtup arg1') arg2')) -> trace "diffAcc:axpy" $ outval where
       outval = do
-        inval' <- inval
-        return . toAcc $ Aforeign ff afun' inval'
-      afun = case (fromDynamic $ toDyn afun') :: Maybe (Acc (Vector Float, Vector Float) -> Acc (Vector Float))
-      inval = do
         res1' <- res1
         res2' <- res2
-        return . toAcc $ Atuple (SnocAtup (SnocAtup NilAtup res1') res2')
-      arg1 = case (fromDynamic $ toDyn arg1') :: Maybe (Acc (Array sh Float)) of
+        return $ axpy (res1', res2')
+      arg1 = case (fromDynamic $ toDyn arg1') :: Maybe Vect of
         Nothing -> trace "diffAcc!axpy type mismatch" $ undefined
         Just fn -> fn
-      arg2 = case (fromDynamic $ toDyn arg2') :: Maybe (Acc (Array sh Float)) of
+      arg2 = case (fromDynamic $ toDyn arg2') :: Maybe Vect of
         Nothing -> trace "diffAcc!axpy type mismatch" $ undefined
         Just fn -> fn
       res1 = diffAcc arg1 dout params
@@ -263,7 +258,7 @@ diffAcc self dout params = case toPreAcc self of
       inval' <- inval
       return . toAcc $ Map fn inval' --acc
     --(inval,dparams) = diffAcc acc (toAcc $ Map (diffExp f) dout) params
-    inval = case (fromDynamic $ toDyn acc) :: Maybe (Acc (Array sh Float)) of 
+    inval = case (fromDynamic $ toDyn acc) :: Maybe Vect of 
       Nothing -> trace "diffAcc:Map size mismatch" $ undefined
       Just acc' -> diffAcc acc' (toAcc $ Map (diffExp f) dout) params
 
