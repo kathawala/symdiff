@@ -78,7 +78,8 @@ library
 --0.15.1.1,
                        cuda >=0.7,
                        cublas >= 0.3,
-                       template-haskell >= 2.9
+                       template-haskell >= 2.9,
+                       vector >= 0.10
 
   extra-libraries:     cublas
   

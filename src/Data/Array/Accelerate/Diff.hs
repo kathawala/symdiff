@@ -10,7 +10,7 @@
 module Data.Array.Accelerate.Diff where
 
 import Prelude hiding (map, zipWith)
-import Data.Array.Accelerate hiding ((++),collect)
+import Data.Array.Accelerate hiding ((++),(!!),collect,reverse)
 import qualified Data.Array.Accelerate.AST as AST
 import Data.Array.Accelerate.Smart as Smart
 import Data.Array.Accelerate.Trafo as Trafo
@@ -26,7 +26,7 @@ import Data.Array.Accelerate.BLAS.Internal.Axpy (axpy)
 import Debug.Trace
 import Data.Coerce
 import Data.Dynamic
-
+import qualified Data.Vector as V
 
 testfn :: (Vect, Vect) -> Scal
 testfn (u,v) = sdot ((map tanh u), v)
@@ -175,6 +175,10 @@ mlp x (w1,b1,w2,b2) = layer w2 b2 $ layer w1 b1 x where
 --      in
 --      Abody $ convertOpenAcc config lvl vars alyt body
 
+data Param
+   = Weight     Matr
+   | Bias       Vect
+
 --liftAfun :: (Plain a -> Acc b) -> (Acc c -> Acc b)
 liftAfun :: Unlift Acc a => (a -> b) -> (Acc (Plain a) -> b)
 liftAfun f = f . unlift
@@ -204,7 +208,7 @@ prepareEfun f = f $ Exp $ Tag 0
 diff :: (Unlift Acc a, Arrays (Plain a))
   => (a -> Vect)
   -> Vect
-  -> a
+  -> [Param]
   -> IO Vect
 diff f dout params = diffAcc (prepareAfun f) dout params
 
@@ -213,12 +217,12 @@ diff f dout params = diffAcc (prepareAfun f) dout params
 diffAcc :: forall arrs.
   Vect
   -> Vect
-  -> arrs
+  -> [Param]
   -> IO Vect 
 diffAcc self dout params = case toPreAcc self of
   -- PreAcc Acc Seq Exp (Plain (Matr, Vect, Matr, Vect))
-  --Atag i                          -> trace "Atag" $ Atag i -- AST.Avar (prjIdx ("de Bruijn conversion tag " ++ show i) i alyt)
-  --Pipe afun1 afun2 acc            -> trace "Pipe" $ Pipe afun1 afun2 acc 
+  Atag i                          -> trace "Atag" $ undefined -- Atag i -- AST.Avar (prjIdx ("de Bruijn conversion tag " ++ show i) i alyt)
+  Pipe afun1 afun2 acc            -> trace "Pipe" $ undefined -- Pipe afun1 afun2 acc 
 
   --Aforeign ff afun acc            -> trace "diffAcc:Aforeign" $ (res,dparams) where -- Aforeign ff afun acc where
   --  (res,dparams) = case strForeign ff of
@@ -231,35 +235,64 @@ diffAcc self dout params = case toPreAcc self of
         res2' <- res2
         return $ axpy (res1', res2')
       arg1 = case (fromDynamic $ toDyn arg1') :: Maybe Vect of
-        Nothing -> trace "diffAcc!axpy type mismatch" $ undefined
+        Nothing -> trace "diffAcc:axpy!type mismatch" $ undefined
         Just fn -> fn
       arg2 = case (fromDynamic $ toDyn arg2') :: Maybe Vect of
-        Nothing -> trace "diffAcc!axpy type mismatch" $ undefined
+        Nothing -> trace "diffAcc:axpy!type mismatch" $ undefined
         Just fn -> fn
       res1 = diffAcc arg1 dout params
       res2 = diffAcc arg2 dout params
 
+  Aforeign ff@(strForeign -> "gemv") afun
+    (toPreAcc -> Atuple (SnocAtup (SnocAtup NilAtup argm') argv')) -> do
+      traceM "diffAcc:gemv"
+      let argm = case (fromDynamic $ toDyn argm') :: Maybe Matr of
+                  Nothing -> trace "diffAcc:gemv!type mismatch" $ undefined
+                  Just fn -> fn
+      let argv = case (fromDynamic $ toDyn argv') :: Maybe Vect of
+                  Nothing -> trace "diffAcc:gemv!type mismatch" $ undefined
+                  Just fn -> fn
+      let ix = case toPreAcc argm of
+                  Aprj (toInt -> ix') (toPreAcc -> Atag 0) -> ix'
+      let resm = case params !! ix of
+                  Weight w -> w
+                  Bias b -> trace "diffAcc:gemv!bias in weight slot" $ undefined
+      resv <- diffAcc argv (gevm (dout, resm)) params
+      traceM $ "diffAcc:gemv:Aprj: gradient for parameter " ++ show ix ++ " is ("
+      traceShowM $ gevv (dout, resv)
+      traceM $ ")"
+      return $ gemv (resm, resv)
+
   --Acond b acc1 acc2               -> trace "Acond" $ Acond b acc1 acc2       -- AST.Acond (cvtE b) (cvtA acc1) (cvtA acc2)
   --Awhile pred iter init           -> trace "Awhile" $ Awhile pred iter init      -- AST.Awhile (cvtAfun1 pred) (cvtAfun1 iter) (cvtA init)
-  --Atuple arrs                     -> trace "Atuple" $ Atuple arrs      -- AST.Atuple (convertSharingAtuple config alyt aenv' arrs)
-  --Aprj ix a                       -> trace "Aprj" $ Aprj ix a        -- AST.Aprj ix (cvtA a)
-  --Use array                       -> trace "Use" $ Use array         -- AST.Use (fromArr array)
-  --Unit e                          -> trace "Unit" $ Unit e        -- AST.Unit (cvtE e)
-  --Generate sh f                   -> trace "Generate" $ Generate sh f    -- AST.Generate (cvtE sh) (cvtF1 f)
+  Atuple arrs                     -> trace "Atuple" $ undefined --Atuple arrs      -- AST.Atuple (convertSharingAtuple config alyt aenv' arrs)
+  Aprj (toInt -> ix) (toPreAcc -> Atag 0) -> do
+    traceM $ "diffAcc:Aprj: gradient for parameter " ++ show ix ++ " is ("
+    traceShowM dout
+    traceM $ ")"
+    return $ case params !! ix of
+      Weight w -> trace "diffAcc:Aprj!weight in bias slot" $ undefined
+      Bias b -> b
+
+  Use array                       -> do
+    traceM "Use"
+    return $ use array -- Use array         -- AST.Use (fromArr array)
+  --Unit e                          -> trace "Unit" $ undefined -- Unit e        -- AST.Unit (cvtE e)
+  Generate sh f                   -> trace "Generate" $ undefined -- Generate sh f    -- AST.Generate (cvtE sh) (cvtF1 f)
   --Reshape e acc                   -> trace "Reshape" $ Reshape e acc      -- AST.Reshape (cvtE e) (cvtA acc)
   --Replicate ix acc                -> trace "Replicate" $ Replicate ix acc   -- mkReplicate (cvtE ix) (cvtA acc)
   --Slice acc ix                    -> trace "Slice" $ Slice acc ix        -- mkIndex (cvtA acc) (cvtE ix)
 
   Map fn'@(prepareEfun -> f) acc -> trace "diffAcc:Map" $ outval where
     fn = case (fromDynamic $ toDyn fn') :: Maybe (Exp Float -> Exp Float) of
-      Nothing -> trace "diffAcc:Map type mismatch" $ undefined
+      Nothing -> trace "diffAcc:Map!type mismatch" $ undefined
       Just fn -> fn
     outval = do
       inval' <- inval
       return . toAcc $ Map fn inval' --acc
     --(inval,dparams) = diffAcc acc (toAcc $ Map (diffExp f) dout) params
     inval = case (fromDynamic $ toDyn acc) :: Maybe Vect of 
-      Nothing -> trace "diffAcc:Map size mismatch" $ undefined
+      Nothing -> trace "diffAcc:Map!size mismatch" $ undefined
       Just acc' -> diffAcc acc' (toAcc $ Map (diffExp f) dout) params
 
   --  f' = prepareEfun f
@@ -283,12 +316,12 @@ diffAcc self dout params = case toPreAcc self of
   --Scanr f e acc                   -> trace "Scanr" $ Scanr f e acc       -- AST.Scanr (cvtF2 f) (cvtE e) (cvtA acc)
 --  Scanr' f e acc                  -> trace "Scanr'" $ Scanr' f e acc      -- AST.Scanr' (cvtF2 f) (cvtE e) (cvtA acc)
   --Scanr1 f acc                    -> trace "Scanr1" $ Scanr1 f acc      -- AST.Scanr1 (cvtF2 f) (cvtA acc)
-  --Permute f dftAcc perm acc       -> trace "Permute" $ Permute f dftAcc perm acc     -- AST.Permute (cvtF2 f) (cvtA dftAcc) (cvtF1 perm) (cvtA acc)
-  --Backpermute newDim perm acc     -> trace "Backpermute" $ Backpermute newDim perm acc -- AST.Backpermute (cvtE newDim) (cvtF1 perm) (cvtA acc)
-  --Stencil stencil boundary acc    -> trace "Stencil" $ Stencil stencil boundary acc
-  --Stencil2 stencil bndy1 acc1 bndy2 acc2
-  --  -> trace "Stencil2" $ Stencil2 stencil bndy1 acc1 bndy2 acc2
-  --Collect seq                     -> trace "Collect" $ Collect seq      -- AST.Collect (convertSharingSeq config alyt EmptyLayout aenv' [] seq)
+  Permute f dftAcc perm acc       -> trace "Permute" $ undefined --Permute f dftAcc perm acc     -- AST.Permute (cvtF2 f) (cvtA dftAcc) (cvtF1 perm) (cvtA acc)
+  Backpermute newDim perm acc     -> trace "Backpermute" $ undefined --Backpermute newDim perm acc -- AST.Backpermute (cvtE newDim) (cvtF1 perm) (cvtA acc)
+  Stencil stencil boundary acc    -> trace "Stencil" $ undefined -- Stencil stencil boundary acc
+  Stencil2 stencil bndy1 acc1 bndy2 acc2
+    -> trace "Stencil2" $ undefined -- Stencil2 stencil bndy1 acc1 bndy2 acc2
+  Collect seq                     -> trace "Collect" $ undefined -- Collect seq      -- AST.Collect (convertSharingSeq config alyt EmptyLayout aenv' [] seq)
   otherwise -> trace "diffAcc:otherwise" undefined
 
 --data family TupMaybe tup :: *
@@ -358,8 +391,9 @@ test = do
   --traceShowM $ sdot (map tanh $ use x) (use y)
   --traceShowM $ I.run1 (liftAfun testfn) (x,y)
 
-  --traceShowM $ liftAfun $ mlp $ use x
-  --traceShowM $ diff (mlp $ use x) (use dz) (use w,use x,use v,use y)
+  traceShowM $ liftAfun $ mlp $ use x
+  r <- diff (mlp $ use x) (use dz)
+    $ reverse [Weight $ use w,Bias $ use x,Weight $ use v,Bias $ use y]
   -- w :: Acc (Aprj (SuccTupIdx ...) _)
   --   :: Acc (Aprj (SuccTupIdx ...) (Acc (Atag ...)))
   -- h :: Acc (Aprj ZeroTupIdx _)
