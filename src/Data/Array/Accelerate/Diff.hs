@@ -32,8 +32,8 @@ testfn :: (Vect, Vect) -> Scal
 testfn (u,v) = sdot ((map tanh u), v)
 
 mlp :: Vect -> (Matr, Vect, Matr, Vect) -> Vect
-mlp x (w1,b1,w2,b2) = layer w2 b2 $ layer w1 b1 x where
-	layer w b h = map tanh $ axpy (b, (gemv (w,h)))
+mlp x (w1,b1,w2,b2) = layer w2 b2 $ layer w1 b1 x
+  where layer w b h = map tanh $ axpy (b, (gemv (w,h)))
 
 --mlp :: Acc (Vector Float, Vector Float) -> Acc (Vector Float)
 --mlp vs = axpy b1 b2 where

@@ -4,8 +4,8 @@ import Test.QuickCheck (quickCheckResult)
 import Test.QuickCheck.Test (isSuccess)
 import Data.Array.Accelerate hiding (all, not, length)
 import Prelude hiding (zipWith)
-import Data.Array.Accelerate.Interpreter as I
--- import Data.Array.Accelerate.CUDA as I
+-- import Data.Array.Accelerate.Interpreter as I
+import Data.Array.Accelerate.CUDA as I
 import Data.Array.Accelerate.BLAS.Internal.Dot
 import Data.Array.Accelerate.BLAS.Internal.Gemm
 import Data.Array.Accelerate.BLAS.Internal.Axpy
@@ -23,7 +23,7 @@ prop_gevm :: Bool
 prop_gevm = (toList $ I.run $ gevm ((use (fromList (Z:.3) [1..] :: Vector Float)), (use (fromList (Z:.3:.2) [2,1,0,-1,2,4] :: Array DIM2 Float)))) == [8.0,11.0]
 
 prop_outer :: Bool
-prop_outer = (toList $ I.run $ outer ((use (fromList (Z:.4) [1..] :: Vector Float)), (use (fromList (Z:.3) [2,-2,1] :: Vector Float)))) == [2.0,-2.0,1.0,4.0,-4.0,2.0,6.0,-6.0,3.0,8.0,-8.0,4.0]
+prop_outer = (toList $ I.run $ gevv ((use (fromList (Z:.4) [1..] :: Vector Float)), (use (fromList (Z:.3) [2,-2,1] :: Vector Float)))) == [2.0,-2.0,1.0,4.0,-4.0,2.0,6.0,-6.0,3.0,8.0,-8.0,4.0]
 
 prop_axpy_integrity :: [Float] -> [Float] -> Bool
 prop_axpy_integrity _ []  = True
