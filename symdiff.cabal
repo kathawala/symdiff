@@ -57,18 +57,19 @@ Test-Suite symdiff-testsuite
      
 library
   -- Modules exported by the library.
-  exposed-modules: Data.Array.Accelerate.Diff
-                   Data.Array.Accelerate.BLAS.Internal.Dot
+  exposed-modules: Examples.NeuralNet
+-- Data.Array.Accelerate.Diff
                    Data.Array.Accelerate.BLAS.Internal.Gemm
+                   Data.Array.Accelerate.BLAS.Internal.Dot
                    Data.Array.Accelerate.BLAS.Internal.Axpy
                    Data.Array.Accelerate.BLAS
-                   Examples.NeuralNet
-  
+                   
+                   
   -- Modules included in this library but not exported.
   --other-modules: Data.Array.Accelerate.BLAS.Internal.Dot     
   
   -- LANGUAGE extensions used by modules in this package.
-  other-extensions:    TemplateHaskell
+  -- other-extensions:    TemplateHaskell
   
   -- Other library packages from which modules are imported.
   build-depends:       base >=4.7 && <4.9,
@@ -77,8 +78,7 @@ library
                        accelerate-cuda >=2.0,
 --0.15.1.1,
                        cuda >=0.7,
-                       cublas >= 0.3,
-                       template-haskell >= 2.9
+                       cublas >= 0.3
 
   extra-libraries:     cublas
   

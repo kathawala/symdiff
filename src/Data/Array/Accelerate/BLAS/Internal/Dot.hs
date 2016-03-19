@@ -14,30 +14,21 @@ import Foreign.C.Types
 
 cudaDotProductF :: Maybe Stream -> (Vector Float, Vector Float) -> CIO (Scalar Float)
 cudaDotProductF ms (v1,v2) = do
-  -- traceShowM "cudaDotProductF"
   let n = arraySize (arrayShape v1)
-  -- traceShowM n
 
   withDevicePtrs v1 ms $ \v1ptr -> do
     withDevicePtrs v2 ms $ \v2ptr -> do
       case ms of
         Just s -> do
-          -- traceShowM "Just"
           liftIO $ BLF.setStream theHandle s
           CFloat o <- liftIO $ BL.dot theHandle n (castDevPtr v1ptr) 1 (castDevPtr v2ptr) 1
-          -- traceShowM o
           let oarr = fromList Z [o]
-          -- traceShowM oarr
           useArray oarr
-          -- traceShowM oarr
           return oarr
         Nothing -> do
           CFloat o <- liftIO $ BL.dot theHandle n (castDevPtr v1ptr) 1 (castDevPtr v2ptr) 1
-          -- traceShowM o
           let oarr = fromList Z [o]
-          -- traceShowM oarr
           useArray oarr
-          -- traceShowM oarr
           return oarr
 
 sdot :: (Vect,Vect) -> Scal

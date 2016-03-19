@@ -1,0 +1,265 @@
+% v2-acmsmall-sample.tex, dated March 6 2012
+% This is a sample file for ACM small trim journals
+%
+% Compilation using 'acmsmall.cls' - version 1.3 (March 2012), Aptara Inc.
+% (c) 2010 Association for Computing Machinery (ACM)
+%
+% Questions/Suggestions/Feedback should be addressed to => "acmtexsupport@aptaracorp.com".
+% Users can also go through the FAQs available on the journal's submission webpage.
+%
+% Steps to compile: latex, bibtex, latex latex
+%
+% For tracking purposes => this is v1.3 - March 2012
+
+\documentclass[prodmode,acmtecs]{acmsmall} % Aptara syntax
+
+% Package to generate and customize Algorithm as per ACM style
+\usepackage[ruled]{algorithm2e}
+\usepackage{listings}
+\renewcommand{\algorithmcfname}{ALGORITHM}
+\SetAlFnt{\small}
+\SetAlCapFnt{\small}
+\SetAlCapNameFnt{\small}
+\SetAlCapHSkip{0pt}
+\IncMargin{-\parindent}
+
+% Copyright
+%\setcopyright{acmcopyright}
+%\setcopyright{acmlicensed}
+%\setcopyright{rightsretained}
+%\setcopyright{usgov}
+%\setcopyright{usgovmixed}
+%\setcopyright{cagov}
+%\setcopyright{cagovmixed}
+
+% Document starts
+\begin{document}
+
+% Title portion
+\title{Reverse-Mode Automatic Differentiation in Haskell Using the Accelerate Library}
+\author{JAMES BRADBURY
+\affil{Stanford University}
+FARHAN KATHAWALA
+\affil{Stanford University}}
+% NOTE! Affiliations placed here should be for the institution where the
+%       BULK of the research was done. If the author has gone to a new
+%       institution, before publication, the (above) affiliation should NOT be changed.
+%       The authors 'current' address may be given in the "Author's addresses:" block (below).
+%       So for example, Mr. Abdelzaher, the bulk of the research was done at UIUC, and he is
+%       currently affiliated with NASA.
+
+\begin{abstract}
+Automatic Differentiation is a method for applying differentiation strategies to source
+code, by taking a computer program and deriving from that program a separate program which
+calculates the derivatives of the output of the first program. Because of this, Automatic
+Differentiation is of vital importance to most deep learning tasks as it allows
+for the easy backpropogation of complex calculations in order to minimize the loss of a
+learning algorithm. Most of these calculations are some variant of composed matrix and vector
+operations (such as matrix multiplication or dot products), and because Haskell, and the
+functional programming paradigm as a whole, stresses the easy composition of pure functions,
+the task of providing a good Automatic Differentiation implementation for deep learning
+tasks becomes much easier when using Haskell. Our work provides a functioning Automatic
+Differentiation library for use with the Accelerate library which implements matrix
+operations.
+\end{abstract}
+
+%
+
+% We no longer use \terms command
+%\terms{Design, Algorithms, Performance}
+
+\keywords{Deep Learning, NVIDIA, CUDA, CUBLAS, Abstract Syntax Trees}
+
+\maketitle
+
+
+\section{Introduction}
+
+Andreas Griewak in 1989 noted that \cite{griewank1989}
+
+% quote
+\begin{quote}
+``Reverse Accumulation yields truncation error free gradient values at less than 5 / \emph{n} times the computing time of divided differences.
+\end{quote}
+
+Thus, we have known for a long time that Automatic Differentiation is by far a better
+approach than calculating out complex derivatives by hand and applying this derivative to
+each scalar function whenever our learning computation function changes because Automatic
+Differentiation is error-free and takes less time than manually computing the gradient might
+take.
+
+Approaches to Automatic Differentiation exist in many forms, the most well known of which is
+the Theano library in the Python programming language \cite{bastien2012}, but these
+implementations often require workarounds in order to do things not supported by the
+underlying programming language. For example, the lack of lazily evaluated functions (also
+called thunks) in Python, requires the Theano library to undergo extra compilation steps
+in order to have a sufficiently quick differentiation strategy.
+
+Haskell provides a number of features suited to the task at hand such as
+
+\paragraph{Lazy Evalutation}
+
+The ability to chain together many functions and delay their computation is critical as it
+necessitates the creation of and ability to traverse a computation graph. This graph of the
+computations of a given program is what we utilize to perform automatic differentiation on
+any program of any variation of matrix and vector operation composition.
+
+\paragraph{Tools For Transforming a Computation Graph}
+
+Haskell provides Generalized Abstract Data Types (GADTs) as a language extension, which
+allow you to create more powerful data types, and as such this allows for the easy creation
+of Abstract Syntax Trees which can easily be made into computations.
+
+\paragraph{Available Libraries}
+
+The Accelerate library implements an Abstract Syntax Tree type for all matrix operations
+which we can leverage to traverse the computation graph and from that easily compose a
+differentiated computation graph. Using other libraries in the Haskell ecosystem, Accelerate
+is able to then send this entire computation graph as one kernel to the GPU of a system for
+quick calculation. These atomic calculations defined by the GPU allow differentiation of
+matrix operations to be done cleanly and quickly.
+
+\smallskip
+
+Utilizing these features we are able to present a small step towards a unified deep-learning
+framwork in Haskell. Using the Accelerate library to leverage matrix and vector operations,
+we provide the backpropogation ability and future work may be able to combine these elments
+into a larger package for one-stop deep learning capabilities.
+
+\section{Implementation}
+
+Our implementation can be broken down into the following steps
+
+\subsection{Binding to CUBLAS}
+
+GPUs allow for atomic matrix and array operations which can be implemented in the Accelerate
+library by utilizing the GPU of a system with the CUDA architecture. To implement such
+functions as matrix multiplication (called "gemm") and vector addition (called "axpy"), it
+was necessary to interface with the CUDA version of the Basic Linear Algebra System (called
+CUBLAS). Using the Foreign Function interface of the Accelerate we were able to directly
+call CUBLAS functions as long as we implemented a pure, functional implementation of the
+function for use when a supported GPU is not present on a system \cite{clifton2014}.
+This also required keeping track of device pointers and GPU execution streams,
+so below we show a cleaned-up, with some details omitted for brevity, example of the gemv (matrix-vector multiplication) implementation we used
+
+\smallskip
+\lstset{language=Haskell}
+\begin{lstlisting}{frame=single}
+pureGemv :: (Matr,Vect) -> Vect
+pureGemv (arr,brr)  = slice result (lift $ Z:.All:.0)
+  where
+    result          = (fold (+) 0 $ zipWith (*) arrRepl brrRepl)
+    bLen            = length brr
+    Z :. rowsA :. _ = unlift (shape arr) ::Z:.Exp Int:.Exp Int
+
+    arrRepl         = replicate (lift $ Z:.All:.1:.All) arr
+    brrMat          = reshape   (lift $ Z:.bLen:.1) brr
+    brrMatT         = transpose brrMat
+    brrRepl         = replicate (lift $ Z:.rowsA:. All:.All) brrMatT
+
+cudaGemvF :: (Matr, Vect) -> CIO (Vect)
+cudaGemvF (a,b) = do
+  let Z :. ra :. ca = arrayShape a   -- m k
+      Z :. rb       = arrayShape b   -- k n
+  c <- allocateArray $ Z :. ra -- m n
+  withDevicePtrs a ms $ \aptr -> do
+    withDevicePtrs b ms $ \bptr -> do
+      withDevicePtrs c ms $ \cptr -> do
+        liftIO $ BL.gemm 1 ra rb 1 bptr0 1 aptr0 ca 0 cptr0 1
+        return c
+        
+  where bptr0 = castDevPtr bptr
+ 	 	aptr0 = castDevPtr aptr
+ 	 	cptr0 = castDevPtr cptr
+ 	 	
+
+gemv :: (Matr, Vect) -> Vect
+gemv (v1,v2) = foreignAcc cudaGemv pureGemv $ lift (v1,v2)
+  where cudaGemv = CUDAForeignAcc "cudaGemvF"
+\end{lstlisting}
+\smallskip
+
+\subsection{Retrieving the Abstract Syntax Tree}
+
+Once we can provide a few matrix and vector operations, the user will specify a program
+which composes these calculations on some set of inputs with a specific input to be
+optimized, in most cases of deep learning algorithms this input is the weight vector.
+Given this user-defined program, we need to retrieve the Abstract Syntax Tree representation
+of this program in order to perform Automatic Differentiation on the program. The Accelerate
+library uses the Generalized Abstract Data Type (GADT) extension to the Haskell language
+to create Abstract Syntax Trees in Higher-Order-Abstract-Syntax (HOAS)
+\cite{chakravarty2011}. This use of GADTs and Abstract Syntax Trees in HOAS makes it possible
+to traverse the tree using pattern matching for all the possible computations and
+expressions.
+
+\subsection{Calculating the Differentiation}
+
+To do this, we need to ask the question "What are we taking the derivative with respect to?".
+In any kind of machine learning algorithm, we are taking the derivative of the input which
+we want to improve, so as to improve the learned computation. This means that we want to take
+the derivative with respsect to the weight vector/matrix of the computation. With this in
+mind, we traverse the user-defined program's Abstract Syntax Tree and tag the weight
+parameters as we come across them. Then, we create out own Abstract Syntax Tree in a similar
+method to the one used by the Accelerate library, but our tree starts with the derivative
+of the root of the user-defined tree and reverses its way to the top. One can consider
+that if a computation in the original tree looks like
+
+\begin{equation}
+\label{eqn:01}
+y = f(x)
+\end{equation}
+
+then obviously the correlated computation in the derived tree would be
+
+\begin{equation}
+\label{eqn:02}
+dx = f'(dy)
+\end{equation}
+
+Similarly, we can think about the derivatives of matrix/vector operations easily, using
+Haskell as such. In this manner, the following function
+
+\begin{equation}
+\label{eqn:03}
+z = \textbf{dot} \; x \; y
+\end{equation}
+
+can be derived as
+
+\begin{equation}
+\label{eqn:04}
+(dx,dy) = (\textbf{map} \; (dz \, *) \; y, \textbf{map} \; (dz \, *) \; x)
+\end{equation}
+
+We go through the tree making conversions as such and composing them together until we run
+into a function which has as one of its inputs any of the weight inputs we tagged earlier.
+If we encounter such a function, then we store the entire graph up to and including that
+derivative to evaluate later because, just as the input for Eq. 1 was \emph{x}
+and the output of Eq. 2 was \emph{dx}, so too the output of the stored graph will be the
+derivative of the tagged weight input. Doing this for the whole graph completes the
+Automatic Differentiation.
+
+\section{Summary}
+
+In short, the library we produced can be seen as the first stepping-stone towards bridging
+the similar paradigms of functional programming and deep learning. By taking advantage of
+function composability, GADTs, Abstract Syntax Trees, and the lazy evaluation offered by
+Haskell, we were able to provide a limited, albeit sufficient for some types of deep
+learning, library for Automatic Differentiation of any arbitrary, varied composition of
+matrix and vector operations such as matrix-vector multiplication, vector-matrix
+multiplication, outer product, dot product, and vector addition. Future work in cleaning up
+and fully implementing these functions may allow us to release this library as a package
+compatible with the Haskell Accelerate library.
+
+% Bibliography
+\bibliographystyle{ACM-Reference-Format-Journals}
+\bibliography{paper}
+                             % Sample .bib file with references that match those in
+                             % the 'Specifications Document (V1.5)' as well containing
+                             % 'legacy' bibs and bibs with 'alternate codings'.
+                             % Gerry Murray - March 2012
+
+\end{document}
+% End of paper.tex
+
+

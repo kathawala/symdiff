@@ -17,8 +17,6 @@ cudaAxpyF ms (v1,v2) = do
   let n  = arraySize (arrayShape v1)
   v3 <- allocateArray $ Z :. n :: CIO (Vector Float)
 
-
-
   withDevicePtrs v1 ms $ \v1ptr -> do
     withDevicePtrs v2 ms $ \v2ptr -> do
       withDevicePtrs v3 ms $ \v3ptr -> do

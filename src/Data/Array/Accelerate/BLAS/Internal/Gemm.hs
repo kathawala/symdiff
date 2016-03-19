@@ -27,17 +27,12 @@ pureGemv vs = slice result (lift (Z :. All :. (0::Int)))
 
 cudaGemvF :: Maybe Stream -> (Matrix Float, Vector Float) -> CIO (Vector Float)
 cudaGemvF ms (a,b) = do
-  -- traceShowM "cudaGemmF"
   let Z :. ra :. ca = arrayShape a   -- m k
       Z :. rb       = arrayShape b   -- k n
-  -- traceShowM (ra,ca,rb,cb)
   c <- allocateArray $ Z :. ra -- m n
   withDevicePtrs a ms $ \aptr -> do
     withDevicePtrs b ms $ \bptr -> do
       withDevicePtrs c ms $ \cptr -> do
-        -- BL.gemm :: Handle -> transa -> transb -> m -> n -> k -> alpha -> a -> lda -> b -> ldb -> beta -> c -> ldc
-        -- Since CUBLAS uses column-major mode on matrices, we will need to change this up a bit to:
-        -- BL.gemm :: Handle -> transa -> transb -> n -> m -> k -> alpha -> b -> ldb -> a -> lda -> beta -> c -> ldc
         -- where
         -- transa = BL.N
         -- transb = BL.N
