@@ -93,15 +93,15 @@ cudaOuterF ms (a,b) = do
 
 gemv :: (Matr, Vect) -> Vect
 gemv (v1,v2) = foreignAcc cudaGemv pureGemv $ lift (v1,v2)
-  where cudaGemv = CUDAForeignAcc "cudaGemvF" (\stream -> cudaGemvF (Just stream))
+  where cudaGemv = CUDAForeignAcc "gemv" (\stream -> cudaGemvF (Just stream))
 
 gevm :: (Vect, Matr) -> Vect
 gevm (v1,v2) = foreignAcc cudaGevm pureGevm $ lift (v1,v2)
-  where cudaGevm = CUDAForeignAcc "cudaGevmF" (\stream -> cudaGevmF (Just stream))
+  where cudaGevm = CUDAForeignAcc "gevm" (\stream -> cudaGevmF (Just stream))
 
 outer :: (Vect, Vect) -> Matr
 outer (v1,v2) = foreignAcc cudaOuter pureOuter $ lift (v1,v2)
-  where cudaOuter = CUDAForeignAcc "cudaOuterF" (\stream -> cudaOuterF (Just stream)) 
+  where cudaOuter = CUDAForeignAcc "gevv" (\stream -> cudaOuterF (Just stream)) 
 
 test = do
  -- answer should be [22,38,-6]

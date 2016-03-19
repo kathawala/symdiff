@@ -21,4 +21,3 @@ toVector x                   = use (fromList (Z :. (length x)) x)
 mlp :: Matr -> Vect -> Matr -> Vect -> Vect -> Vect
 mlp w1 b1 w2 b2 x = layer w2 b2 $ layer w1 b1 x
   where layer w b x = map tanh $ axpy (b,(gemv (w,x)))
-  
