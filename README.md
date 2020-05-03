@@ -5,6 +5,7 @@ GPU-powered symbolic differentiation in haskell
 
 Proof of concept generation of gradient expressions is in the `test` function in `Diff.hs`
 
+
 ##Build Steps
 Before building, you will need to have CUDA installed on your system, both the developer driver and SDK.
 
